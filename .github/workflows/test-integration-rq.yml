@@ -68,6 +68,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-rq
 
   test-py27:
     name: rq, python 2.7, ubuntu-20.04
@@ -143,6 +144,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-rq-latest
 
   check_required_tests:
     name: All rq tests passed or skipped

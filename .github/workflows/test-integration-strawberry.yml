@@ -68,6 +68,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-strawberry
 
 
   test-latest:
@@ -115,6 +116,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-strawberry-latest
 
   check_required_tests:
     name: All strawberry tests passed or skipped

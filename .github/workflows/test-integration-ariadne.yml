@@ -68,6 +68,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-ariadne
 
 
   test-latest:
@@ -115,6 +116,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-ariadne-latest
 
   check_required_tests:
     name: All ariadne tests passed or skipped

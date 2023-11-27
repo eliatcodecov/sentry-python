@@ -68,6 +68,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-gevent
 
   test-py27:
     name: gevent, python 2.7, ubuntu-20.04

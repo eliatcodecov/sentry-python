@@ -68,6 +68,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-requests
 
   test-py27:
     name: requests, python 2.7, ubuntu-20.04

@@ -37,3 +37,4 @@
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: yaml-test

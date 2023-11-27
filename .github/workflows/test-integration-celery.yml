@@ -68,6 +68,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-celery
 
   test-py27:
     name: celery, python 2.7, ubuntu-20.04
@@ -143,6 +144,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-celery-latest
 
   check_required_tests:
     name: All celery tests passed or skipped
