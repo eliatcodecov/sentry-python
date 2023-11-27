@@ -68,6 +68,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-bottle
 
   test-py27:
     name: bottle, python 2.7, ubuntu-20.04
@@ -143,6 +144,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-bottle-latest
 
   check_required_tests:
     name: All bottle tests passed or skipped

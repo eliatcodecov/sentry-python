@@ -89,6 +89,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-django
 
   test-py27:
     name: django, python 2.7, ubuntu-20.04
@@ -204,6 +205,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-django-latest
 
   check_required_tests:
     name: All django tests passed or skipped

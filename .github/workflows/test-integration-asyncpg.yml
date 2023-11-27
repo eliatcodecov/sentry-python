@@ -89,6 +89,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-asyncpg
 
 
   test-latest:
@@ -157,6 +158,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-asyncpg-latest
 
   check_required_tests:
     name: All asyncpg tests passed or skipped

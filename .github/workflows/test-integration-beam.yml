@@ -68,6 +68,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-beam
 
 
   test-latest:
@@ -115,6 +116,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          flags: integration-beam-latest
 
   check_required_tests:
     name: All beam tests passed or skipped
