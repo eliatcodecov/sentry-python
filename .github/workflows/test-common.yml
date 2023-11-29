@@ -70,7 +70,6 @@ jobs:
           url: https://ingest.codecov.io
           files: coverage.xml
           flags: common
-          url: 
 
   test-py27:
     name: common, python 2.7, ubuntu-20.04
