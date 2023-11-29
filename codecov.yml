@@ -5,7 +5,7 @@ coverage:
       default:
         target: auto  # auto compares coverage to the previous base commit
         threshold: 10%  # this allows a 10% drop from the previous base commit coverage
-        informational: true
+        informational: false
 ignore:
   - "tests"
   - "sentry_sdk/_types.py"
