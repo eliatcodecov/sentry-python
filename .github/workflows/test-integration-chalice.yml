@@ -67,6 +67,7 @@ jobs:
       - uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          url: https://ingest.codecov.io
           files: coverage.xml
           flags: integration-chalice
 
@@ -115,6 +116,7 @@ jobs:
       - uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          url: https://ingest.codecov.io
           files: coverage.xml
           flags: integration-chalice-latest
 
