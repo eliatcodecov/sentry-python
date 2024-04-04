@@ -81,7 +81,7 @@ def _wrap_handler(handler):
         # will be the same for all events in the list, since they're all hitting
         # the lambda in the same request.)
 
-        if isinstance(aws_event, list):
+        if isinstance(aws_event, list) and len(aws_event) >= 1:
             request_data = aws_event[0]
             batch_size = len(aws_event)
         else:
@@ -137,9 +137,10 @@ def _wrap_handler(handler):
                     # Starting the thread to raise timeout warning exception
                     timeout_thread.start()
 
-            headers = request_data.get("headers")
-            # AWS Service may set an explicit `{headers: None}`, we can't rely on `.get()`'s default.
-            if headers is None:
+            headers = request_data.get("headers", {})
+            # Some AWS Services (ie. EventBridge) set headers as a list
+            # or None, so we must ensure it is a dict
+            if not isinstance(headers, dict):
                 headers = {}
 
             transaction = continue_trace(

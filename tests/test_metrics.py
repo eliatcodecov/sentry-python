@@ -1,15 +1,28 @@
 # coding: utf-8
-
+import pytest
 import sys
 import time
+import linecache
+
+from sentry_sdk import Hub, metrics, push_scope, start_transaction
+from sentry_sdk.tracing import TRANSACTION_SOURCE_ROUTE
+from sentry_sdk.envelope import parse_json
 
 try:
     from unittest import mock  # python 3.3 and above
 except ImportError:
     import mock  # python < 3.3
 
-from sentry_sdk import Hub, metrics, push_scope
-from sentry_sdk.envelope import parse_json
+try:
+    import gevent
+except ImportError:
+    gevent = None
+
+
+minimum_python_37_with_gevent = pytest.mark.skipif(
+    gevent and sys.version_info < (3, 7),
+    reason="Require Python 3.7 or higher with gevent",
+)
 
 
 def parse_metrics(bytes):
@@ -43,7 +56,9 @@ def parse_metrics(bytes):
     return rv
 
 
-def test_incr(sentry_init, capture_envelopes):
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_incr(sentry_init, capture_envelopes, maybe_monkeypatched_threading):
     sentry_init(
         release="fun-release",
         environment="not-fun-env",
@@ -85,13 +100,18 @@ def test_incr(sentry_init, capture_envelopes):
                     "function": sys._getframe().f_code.co_name,
                     "module": __name__,
                     "lineno": mock.ANY,
+                    "pre_context": mock.ANY,
+                    "context_line": mock.ANY,
+                    "post_context": mock.ANY,
                 }
             ]
         },
     }
 
 
-def test_timing(sentry_init, capture_envelopes):
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_timing(sentry_init, capture_envelopes, maybe_monkeypatched_threading):
     sentry_init(
         release="fun-release@1.0.0",
         environment="not-fun-env",
@@ -122,7 +142,8 @@ def test_timing(sentry_init, capture_envelopes):
     }
 
     assert meta_item.headers["type"] == "metric_meta"
-    assert parse_json(meta_item.payload.get_bytes()) == {
+    json = parse_json(meta_item.payload.get_bytes())
+    assert json == {
         "timestamp": mock.ANY,
         "mapping": {
             "d:whatever@second": [
@@ -133,13 +154,27 @@ def test_timing(sentry_init, capture_envelopes):
                     "function": sys._getframe().f_code.co_name,
                     "module": __name__,
                     "lineno": mock.ANY,
+                    "pre_context": mock.ANY,
+                    "context_line": mock.ANY,
+                    "post_context": mock.ANY,
                 }
             ]
         },
     }
 
+    loc = json["mapping"]["d:whatever@second"][0]
+    line = linecache.getline(loc["abs_path"], loc["lineno"])
+    assert (
+        line.strip()
+        == 'with metrics.timing("whatever", tags={"blub": "blah"}, timestamp=ts):'
+    )
 
-def test_timing_decorator(sentry_init, capture_envelopes):
+
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_timing_decorator(
+    sentry_init, capture_envelopes, maybe_monkeypatched_threading
+):
     sentry_init(
         release="fun-release@1.0.0",
         environment="not-fun-env",
@@ -189,7 +224,8 @@ def test_timing_decorator(sentry_init, capture_envelopes):
     }
 
     assert meta_item.headers["type"] == "metric_meta"
-    assert parse_json(meta_item.payload.get_bytes()) == {
+    json = parse_json(meta_item.payload.get_bytes())
+    assert json == {
         "timestamp": mock.ANY,
         "mapping": {
             "d:whatever-1@second": [
@@ -200,6 +236,9 @@ def test_timing_decorator(sentry_init, capture_envelopes):
                     "function": sys._getframe().f_code.co_name,
                     "module": __name__,
                     "lineno": mock.ANY,
+                    "pre_context": mock.ANY,
+                    "context_line": mock.ANY,
+                    "post_context": mock.ANY,
                 }
             ],
             "d:whatever-2@nanosecond": [
@@ -210,13 +249,26 @@ def test_timing_decorator(sentry_init, capture_envelopes):
                     "function": sys._getframe().f_code.co_name,
                     "module": __name__,
                     "lineno": mock.ANY,
+                    "pre_context": mock.ANY,
+                    "context_line": mock.ANY,
+                    "post_context": mock.ANY,
                 }
             ],
         },
     }
 
+    # XXX: this is not the best location.  It would probably be better to
+    # report the location in the function, however that is quite a bit
+    # tricker to do since we report from outside the function so we really
+    # only see the callsite.
+    loc = json["mapping"]["d:whatever-1@second"][0]
+    line = linecache.getline(loc["abs_path"], loc["lineno"])
+    assert line.strip() == "assert amazing() == 42"
 
-def test_timing_basic(sentry_init, capture_envelopes):
+
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_timing_basic(sentry_init, capture_envelopes, maybe_monkeypatched_threading):
     sentry_init(
         release="fun-release@1.0.0",
         environment="not-fun-env",
@@ -231,7 +283,6 @@ def test_timing_basic(sentry_init, capture_envelopes):
     metrics.timing("timing", 3.0, tags={"a": "b"}, timestamp=ts)
     Hub.current.flush()
 
-    (envelope,) = envelopes
     (envelope,) = envelopes
     statsd_item, meta_item = envelope.items
 
@@ -261,13 +312,18 @@ def test_timing_basic(sentry_init, capture_envelopes):
                     "function": sys._getframe().f_code.co_name,
                     "module": __name__,
                     "lineno": mock.ANY,
+                    "pre_context": mock.ANY,
+                    "context_line": mock.ANY,
+                    "post_context": mock.ANY,
                 }
             ]
         },
     }
 
 
-def test_distribution(sentry_init, capture_envelopes):
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_distribution(sentry_init, capture_envelopes, maybe_monkeypatched_threading):
     sentry_init(
         release="fun-release@1.0.0",
         environment="not-fun-env",
@@ -300,7 +356,8 @@ def test_distribution(sentry_init, capture_envelopes):
     }
 
     assert meta_item.headers["type"] == "metric_meta"
-    assert parse_json(meta_item.payload.get_bytes()) == {
+    json = parse_json(meta_item.payload.get_bytes())
+    assert json == {
         "timestamp": mock.ANY,
         "mapping": {
             "d:dist@none": [
@@ -311,13 +368,25 @@ def test_distribution(sentry_init, capture_envelopes):
                     "function": sys._getframe().f_code.co_name,
                     "module": __name__,
                     "lineno": mock.ANY,
+                    "pre_context": mock.ANY,
+                    "context_line": mock.ANY,
+                    "post_context": mock.ANY,
                 }
             ]
         },
     }
 
+    loc = json["mapping"]["d:dist@none"][0]
+    line = linecache.getline(loc["abs_path"], loc["lineno"])
+    assert (
+        line.strip()
+        == 'metrics.distribution("dist", 1.0, tags={"a": "b"}, timestamp=ts)'
+    )
 
-def test_set(sentry_init, capture_envelopes):
+
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_set(sentry_init, capture_envelopes, maybe_monkeypatched_threading):
     sentry_init(
         release="fun-release@1.0.0",
         environment="not-fun-env",
@@ -360,17 +429,22 @@ def test_set(sentry_init, capture_envelopes):
                     "function": sys._getframe().f_code.co_name,
                     "module": __name__,
                     "lineno": mock.ANY,
+                    "pre_context": mock.ANY,
+                    "context_line": mock.ANY,
+                    "post_context": mock.ANY,
                 }
             ]
         },
     }
 
 
-def test_gauge(sentry_init, capture_envelopes):
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_gauge(sentry_init, capture_envelopes, maybe_monkeypatched_threading):
     sentry_init(
         release="fun-release@1.0.0",
         environment="not-fun-env",
-        _experiments={"enable_metrics": True},
+        _experiments={"enable_metrics": True, "metric_code_locations": False},
     )
     ts = time.time()
     envelopes = capture_envelopes()
@@ -398,11 +472,13 @@ def test_gauge(sentry_init, capture_envelopes):
     }
 
 
+@minimum_python_37_with_gevent
+@pytest.mark.forked
 def test_multiple(sentry_init, capture_envelopes):
     sentry_init(
         release="fun-release@1.0.0",
         environment="not-fun-env",
-        _experiments={"enable_metrics": True},
+        _experiments={"enable_metrics": True, "metric_code_locations": False},
     )
     ts = time.time()
     envelopes = capture_envelopes()
@@ -451,11 +527,15 @@ def test_multiple(sentry_init, capture_envelopes):
     }
 
 
-def test_transaction_name(sentry_init, capture_envelopes):
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_transaction_name(
+    sentry_init, capture_envelopes, maybe_monkeypatched_threading
+):
     sentry_init(
         release="fun-release@1.0.0",
         environment="not-fun-env",
-        _experiments={"enable_metrics": True},
+        _experiments={"enable_metrics": True, "metric_code_locations": False},
     )
     ts = time.time()
     envelopes = capture_envelopes()
@@ -488,11 +568,241 @@ def test_transaction_name(sentry_init, capture_envelopes):
     }
 
 
-def test_tag_normalization(sentry_init, capture_envelopes):
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+@pytest.mark.parametrize("sample_rate", [1.0, None])
+def test_metric_summaries(
+    sentry_init, capture_envelopes, sample_rate, maybe_monkeypatched_threading
+):
     sentry_init(
         release="fun-release@1.0.0",
         environment="not-fun-env",
-        _experiments={"enable_metrics": True},
+        enable_tracing=True,
+        _experiments={
+            "enable_metrics": True,
+            "metrics_summary_sample_rate": sample_rate,
+        },
+    )
+    ts = time.time()
+    envelopes = capture_envelopes()
+
+    with start_transaction(
+        op="stuff", name="/foo", source=TRANSACTION_SOURCE_ROUTE
+    ) as transaction:
+        metrics.incr("root-counter", timestamp=ts)
+        with metrics.timing("my-timer-metric", tags={"a": "b"}, timestamp=ts):
+            for x in range(10):
+                metrics.distribution("my-dist", float(x), timestamp=ts)
+
+    Hub.current.flush()
+
+    (transaction, envelope) = envelopes
+
+    # Metrics Emission
+    assert envelope.items[0].headers["type"] == "statsd"
+    m = parse_metrics(envelope.items[0].payload.get_bytes())
+
+    assert len(m) == 3
+
+    assert m[0][1] == "my-dist@none"
+    assert m[0][2] == "d"
+    assert len(m[0][3]) == 10
+    assert sorted(m[0][3]) == list(map(str, map(float, range(10))))
+    assert m[0][4] == {
+        "transaction": "/foo",
+        "release": "fun-release@1.0.0",
+        "environment": "not-fun-env",
+    }
+
+    assert m[1][1] == "my-timer-metric@second"
+    assert m[1][2] == "d"
+    assert len(m[1][3]) == 1
+    assert m[1][4] == {
+        "a": "b",
+        "transaction": "/foo",
+        "release": "fun-release@1.0.0",
+        "environment": "not-fun-env",
+    }
+
+    assert m[2][1] == "root-counter@none"
+    assert m[2][2] == "c"
+    assert m[2][3] == ["1.0"]
+    assert m[2][4] == {
+        "transaction": "/foo",
+        "release": "fun-release@1.0.0",
+        "environment": "not-fun-env",
+    }
+
+    # Measurement Attachment
+    t = transaction.items[0].get_transaction_event()
+
+    assert t["_metrics_summary"] == {
+        "c:root-counter@none": [
+            {
+                "count": 1,
+                "min": 1.0,
+                "max": 1.0,
+                "sum": 1.0,
+                "tags": {
+                    "transaction": "/foo",
+                    "release": "fun-release@1.0.0",
+                    "environment": "not-fun-env",
+                },
+            }
+        ]
+    }
+
+    assert t["spans"][0]["_metrics_summary"]["d:my-dist@none"] == [
+        {
+            "count": 10,
+            "min": 0.0,
+            "max": 9.0,
+            "sum": 45.0,
+            "tags": {
+                "environment": "not-fun-env",
+                "release": "fun-release@1.0.0",
+                "transaction": "/foo",
+            },
+        }
+    ]
+
+    assert t["spans"][0]["tags"] == {"a": "b"}
+    (timer,) = t["spans"][0]["_metrics_summary"]["d:my-timer-metric@second"]
+    assert timer["count"] == 1
+    assert timer["max"] == timer["min"] == timer["sum"]
+    assert timer["sum"] > 0
+    assert timer["tags"] == {
+        "a": "b",
+        "environment": "not-fun-env",
+        "release": "fun-release@1.0.0",
+        "transaction": "/foo",
+    }
+
+
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_metrics_summary_disabled(
+    sentry_init, capture_envelopes, maybe_monkeypatched_threading
+):
+    sentry_init(
+        release="fun-release@1.0.0",
+        environment="not-fun-env",
+        enable_tracing=True,
+        _experiments={"enable_metrics": True, "metrics_summary_sample_rate": 0.0},
+    )
+    ts = time.time()
+    envelopes = capture_envelopes()
+
+    with start_transaction(
+        op="stuff", name="/foo", source=TRANSACTION_SOURCE_ROUTE
+    ) as transaction:
+        with metrics.timing("my-timer-metric", tags={"a": "b"}, timestamp=ts):
+            pass
+
+    Hub.current.flush()
+
+    (transaction, envelope) = envelopes
+
+    # Metrics Emission
+    assert envelope.items[0].headers["type"] == "statsd"
+    m = parse_metrics(envelope.items[0].payload.get_bytes())
+
+    assert len(m) == 1
+    assert m[0][1] == "my-timer-metric@second"
+    assert m[0][2] == "d"
+    assert len(m[0][3]) == 1
+    assert m[0][4] == {
+        "a": "b",
+        "transaction": "/foo",
+        "release": "fun-release@1.0.0",
+        "environment": "not-fun-env",
+    }
+
+    # Measurement Attachment
+    t = transaction.items[0].get_transaction_event()
+    assert "_metrics_summary" not in t
+    assert "_metrics_summary" not in t["spans"][0]
+
+
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_metrics_summary_filtered(
+    sentry_init, capture_envelopes, maybe_monkeypatched_threading
+):
+    def should_summarize_metric(key, tags):
+        return key == "foo"
+
+    sentry_init(
+        release="fun-release@1.0.0",
+        environment="not-fun-env",
+        enable_tracing=True,
+        _experiments={
+            "enable_metrics": True,
+            "metrics_summary_sample_rate": 1.0,
+            "should_summarize_metric": should_summarize_metric,
+        },
+    )
+    ts = time.time()
+    envelopes = capture_envelopes()
+
+    with start_transaction(
+        op="stuff", name="/foo", source=TRANSACTION_SOURCE_ROUTE
+    ) as transaction:
+        metrics.timing("foo", value=3.0, tags={"a": "b"}, timestamp=ts)
+        metrics.timing("foo", value=2.0, tags={"b": "c"}, timestamp=ts)
+        metrics.timing("bar", value=1.0, tags={"a": "b"}, timestamp=ts)
+
+    Hub.current.flush()
+
+    (transaction, envelope) = envelopes
+
+    # Metrics Emission
+    assert envelope.items[0].headers["type"] == "statsd"
+    m = parse_metrics(envelope.items[0].payload.get_bytes())
+
+    assert len(m) == 3
+    assert m[0][1] == "bar@second"
+    assert m[1][1] == "foo@second"
+    assert m[2][1] == "foo@second"
+
+    # Measurement Attachment
+    t = transaction.items[0].get_transaction_event()["_metrics_summary"]
+    assert len(t["d:foo@second"]) == 2
+    assert {
+        "tags": {
+            "a": "b",
+            "environment": "not-fun-env",
+            "release": "fun-release@1.0.0",
+            "transaction": "/foo",
+        },
+        "min": 3.0,
+        "max": 3.0,
+        "count": 1,
+        "sum": 3.0,
+    } in t["d:foo@second"]
+    assert {
+        "tags": {
+            "b": "c",
+            "environment": "not-fun-env",
+            "release": "fun-release@1.0.0",
+            "transaction": "/foo",
+        },
+        "min": 2.0,
+        "max": 2.0,
+        "count": 1,
+        "sum": 2.0,
+    } in t["d:foo@second"]
+
+
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_tag_normalization(
+    sentry_init, capture_envelopes, maybe_monkeypatched_threading
+):
+    sentry_init(
+        release="fun-release@1.0.0",
+        environment="not-fun-env",
+        _experiments={"enable_metrics": True, "metric_code_locations": False},
     )
     ts = time.time()
     envelopes = capture_envelopes()
@@ -501,6 +811,7 @@ def test_tag_normalization(sentry_init, capture_envelopes):
     metrics.distribution("a", 1.0, tags={"foo-bar": "%$foo"}, timestamp=ts)
     metrics.distribution("b", 1.0, tags={"foo$$$bar": "blah{}"}, timestamp=ts)
     metrics.distribution("c", 1.0, tags={u"foö-bar": u"snöwmän"}, timestamp=ts)
+    metrics.distribution("d", 1.0, tags={"route": "GET /foo"}, timestamp=ts)
     # fmt: on
     Hub.current.flush()
 
@@ -510,9 +821,9 @@ def test_tag_normalization(sentry_init, capture_envelopes):
     assert envelope.items[0].headers["type"] == "statsd"
     m = parse_metrics(envelope.items[0].payload.get_bytes())
 
-    assert len(m) == 3
+    assert len(m) == 4
     assert m[0][4] == {
-        "foo-bar": "_$foo",
+        "foo-bar": "$foo",
         "release": "fun-release@1.0.0",
         "environment": "not-fun-env",
     }
@@ -529,10 +840,19 @@ def test_tag_normalization(sentry_init, capture_envelopes):
         "release": "fun-release@1.0.0",
         "environment": "not-fun-env",
     }
+    assert m[3][4] == {
+        "release": "fun-release@1.0.0",
+        "environment": "not-fun-env",
+        "route": "GET /foo",
+    }
     # fmt: on
 
 
-def test_before_emit_metric(sentry_init, capture_envelopes):
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_before_emit_metric(
+    sentry_init, capture_envelopes, maybe_monkeypatched_threading
+):
     def before_emit(key, tags):
         if key == "removed-metric":
             return False
@@ -547,6 +867,7 @@ def test_before_emit_metric(sentry_init, capture_envelopes):
         environment="not-fun-env",
         _experiments={
             "enable_metrics": True,
+            "metric_code_locations": False,
             "before_emit_metric": before_emit,
         },
     )
@@ -571,7 +892,11 @@ def test_before_emit_metric(sentry_init, capture_envelopes):
     }
 
 
-def test_aggregator_flush(sentry_init, capture_envelopes):
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_aggregator_flush(
+    sentry_init, capture_envelopes, maybe_monkeypatched_threading
+):
     sentry_init(
         release="fun-release@1.0.0",
         environment="not-fun-env",
@@ -588,11 +913,15 @@ def test_aggregator_flush(sentry_init, capture_envelopes):
     assert Hub.current.client.metrics_aggregator.buckets == {}
 
 
-def test_tag_serialization(sentry_init, capture_envelopes):
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_tag_serialization(
+    sentry_init, capture_envelopes, maybe_monkeypatched_threading
+):
     sentry_init(
         release="fun-release",
         environment="not-fun-env",
-        _experiments={"enable_metrics": True},
+        _experiments={"enable_metrics": True, "metric_code_locations": False},
     )
     envelopes = capture_envelopes()
 
@@ -625,7 +954,11 @@ def test_tag_serialization(sentry_init, capture_envelopes):
     }
 
 
-def test_flush_recursion_protection(sentry_init, capture_envelopes, monkeypatch):
+@minimum_python_37_with_gevent
+@pytest.mark.forked
+def test_flush_recursion_protection(
+    sentry_init, capture_envelopes, monkeypatch, maybe_monkeypatched_threading
+):
     sentry_init(
         release="fun-release",
         environment="not-fun-env",
@@ -654,10 +987,12 @@ def test_flush_recursion_protection(sentry_init, capture_envelopes, monkeypatch)
     assert m[0][1] == "counter@none"
 
 
+@minimum_python_37_with_gevent
+@pytest.mark.forked
 def test_flush_recursion_protection_background_flush(
-    sentry_init, capture_envelopes, monkeypatch
+    sentry_init, capture_envelopes, monkeypatch, maybe_monkeypatched_threading
 ):
-    monkeypatch.setattr(metrics.MetricsAggregator, "FLUSHER_SLEEP_TIME", 0.1)
+    monkeypatch.setattr(metrics.MetricsAggregator, "FLUSHER_SLEEP_TIME", 0.01)
     sentry_init(
         release="fun-release",
         environment="not-fun-env",
@@ -684,3 +1019,29 @@ def test_flush_recursion_protection_background_flush(
     m = parse_metrics(envelope.items[0].payload.get_bytes())
     assert len(m) == 1
     assert m[0][1] == "counter@none"
+
+
+@pytest.mark.skipif(
+    not gevent or sys.version_info >= (3, 7),
+    reason="Python 3.6 or lower and gevent required",
+)
+@pytest.mark.forked
+def test_disable_metrics_for_old_python_with_gevent(
+    sentry_init, capture_envelopes, maybe_monkeypatched_threading
+):
+    if maybe_monkeypatched_threading != "greenlet":
+        pytest.skip("Test specifically for gevent/greenlet")
+
+    sentry_init(
+        release="fun-release",
+        environment="not-fun-env",
+        _experiments={"enable_metrics": True},
+    )
+    envelopes = capture_envelopes()
+
+    metrics.incr("counter")
+
+    Hub.current.flush()
+
+    assert Hub.current.client.metrics_aggregator is None
+    assert not envelopes
